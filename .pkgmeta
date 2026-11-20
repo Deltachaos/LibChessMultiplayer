@@ -1,0 +1,18 @@
+package-as: LibChessMultiplayer
+
+externals:
+  Libs/LibStub:
+    url: https://github.com/WoWUIDev/Ace3
+    branch: master
+    path: LibStub
+  Libs/LibMultiplayer:
+    url: https://github.com/Deltachaos/LibMultiplayer
+    branch: main
+  Libs/LibUnitWow:
+    url: https://github.com/Deltachaos/LibUnitWow
+    branch: main
+
+ignore:
+  - tests
+  - Libs/LibUnitWow
+  - Libs/LibMultiplayer
