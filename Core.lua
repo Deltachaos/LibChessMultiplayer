@@ -14,7 +14,7 @@ One client registers one addon. Every addon shares the prefix and channel
 
 if not LibStub then return end
 
-local MAJOR, MINOR = "LibChessMultiplayer-1.0", 10
+local MAJOR, MINOR = "LibChessMultiplayer-1.0", 11
 local Lib = LibStub:NewLibrary(MAJOR, MINOR)
 if not Lib then return end
 
@@ -36,6 +36,7 @@ local TEXT = {
     declined = "Opponent declined the challenge.",
     ["draw-declined"] = "Opponent declined the draw.",
     ["pause-declined"] = "Opponent declined the pause.",
+    ["resume-declined"] = "Opponent declined the resume.",
     paused = "The game is paused.",
     timeout = "Opponent did not answer.",
     offline = "Opponent is offline.",

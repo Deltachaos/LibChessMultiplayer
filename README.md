@@ -42,7 +42,7 @@ From a coroutine, `local ok, ... = promise:resolve()` yields until the reply. `o
 
 A trailing callback on a game command is the same wait in one function. It is called as `callback(true, ...)` or `callback(false, code, message, detail)`.
 
-`Challenge`, `Join`, and `offer:Accept()` resolve with the `game`. `Query` resolves with the `player`. `Discover` resolves with the list of players. `Resign`, `Over`, `Flag`, `Send`, `offer:Decline()`, and a draw or pause offer's `Accept` or `Decline` resolve when the opponent acknowledges the message, with no extra success values. `OfferDraw` and `OfferPause` wait for the answer. Each resolves when the opponent accepts, and rejects with `declined` when the opponent declines. `Move` waits until the opponent accepts or rejects the move.
+`Challenge`, `Join`, and `offer:Accept()` resolve with the `game`. `Query` resolves with the `player`. `Discover` resolves with the list of players. `Resign`, `Over`, `Flag`, `Send`, `offer:Decline()`, and a draw or pause offer's `Accept` or `Decline` resolve when the opponent acknowledges the message, with no extra success values. `OfferDraw`, `OfferPause`, and `Resume` wait for the answer. Each resolves when the opponent accepts, and rejects with `declined` when the opponent declines. `Move` waits until the opponent accepts or rejects the move.
 
 An immediate failure rejects the promise before the call returns. Where the call also takes `onFail`, that function runs as well.
 
@@ -194,6 +194,7 @@ game:OnMove(function(move) end)
 game:OnOver(function(result, reason) end)
 game:OnDrawOffer(function(offer) end)
 game:OnPauseOffer(function(offer) end)
+game:OnResumeOffer(function(offer) end)
 game:OnPause(function(paused) end)
 ```
 
@@ -216,7 +217,9 @@ end)
 game:OfferPause(function(ok, code, message)
     -- opponent declined: ok == false, code == "declined"
 end)
-game:Resume(function(ok) end)
+game:Resume(function(ok, code, message)
+    -- opponent declined: ok == false, code == "declined"
+end)
 game:Send("handicap", { side = "white", ms = 30000 }, function(ok) end)
 game:Send("handicap", function(ok) end)  -- data is nil
 ```
@@ -236,13 +239,14 @@ end)
 
 `Over` announces a finished position. `result` must be `"1-0"`, `"0-1"`, or `"1/2-1/2"`. These three end the local game immediately, then the promise waits for the acknowledgement.
 
-`OfferDraw` is legal only when both sides advertised `draw`. `OfferPause` is legal only when both sides advertised `pause`. Register either in `options` or with `chess:Option`. An offer is tied to the current ply. The promise and the callback stay open until the opponent answers. A decline calls the callback as `false, "declined", "Opponent declined the draw."` or `"Opponent declined the pause."` and rejects the promise the same way. The game stays in progress. An accepted draw resolves the promise, ends the game, and `OnOver` runs with `"1/2-1/2"` and `"draw"`. An accepted pause resolves the promise, sets `game.paused`, and runs `OnPause(true)` on both sides. `Move` and `Flag` then reject with `paused` and `"The game is paused."` `Resume` clears the pause locally and tells the opponent, and `OnPause(false)` runs on both sides. `OnDrawOffer` and `OnPauseOffer` run only for an offer you receive. With no handler, that offer is declined.
+`OfferDraw` is legal only when both sides advertised `draw`. `OfferPause` and `Resume` are legal only when both sides advertised `pause`. Register either in `options` or with `chess:Option`. An offer is tied to the current ply. The promise and the callback stay open until the opponent answers. A decline calls the callback as `false, "declined", "Opponent declined the draw."`, `"Opponent declined the pause."`, or `"Opponent declined the resume."` and rejects the promise the same way. The game stays in progress. An accepted draw resolves the promise, ends the game, and `OnOver` runs with `"1/2-1/2"` and `"draw"`. An accepted pause resolves the promise, sets `game.paused`, and runs `OnPause(true)` on both sides. `Move` and `Flag` then reject with `paused` and `"The game is paused."` `Resume` asks the opponent to continue. The game stays paused until that offer is accepted, and then `OnPause(false)` runs on both sides. `OnDrawOffer`, `OnPauseOffer`, and `OnResumeOffer` run only for an offer you receive. With no handler, that offer is declined.
 
 ```lua
 offer:Accept()    -- draw ends 1/2-1/2; pause sets game.paused
 offer:Decline()
 offer:ToString()  -- "Thrall · 1520 · DeltaChess · offers a draw"
                   -- "Thrall · 1520 · DeltaChess · offers a pause"
+                  -- "Thrall · 1520 · DeltaChess · offers to resume"
 ```
 
 Both return a promise that resolves on acknowledgement. An offer for a ply that is no longer current rejects with `"The draw offer is no longer available."` or `"The pause offer is no longer available."`
@@ -352,7 +356,7 @@ If nothing matches, `Matchmake` lists your lobby and keeps watching. The listed 
 | `unsupported` | `Opponent does not support clocks.` or `This lobby requires clocks.` A custom option uses its label, such as `time handicaps`. A missing local option says `This addon does not support clocks.` |
 | `incompatible` | `Opponent's chess multiplayer is not compatible.` |
 | `busy` | `Opponent is already in a game.` Locally, `You are already in a game.` or `You are not accepting challenges.` |
-| `declined` | `Opponent declined the challenge.` A rejected draw says `Opponent declined the draw.` A rejected pause says `Opponent declined the pause.` Cancelling says `The challenge was cancelled.` An offer that is already gone says `The challenge is no longer available.` |
+| `declined` | `Opponent declined the challenge.` A rejected draw says `Opponent declined the draw.` A rejected pause says `Opponent declined the pause.` A rejected resume says `Opponent declined the resume.` Cancelling says `The challenge was cancelled.` An offer that is already gone says `The challenge is no longer available.` |
 | `paused` | `The game is paused.` |
 | `timeout` | `Opponent did not answer.` Also used when a send is not acknowledged in time. |
 | `offline` | `Opponent is offline.` |

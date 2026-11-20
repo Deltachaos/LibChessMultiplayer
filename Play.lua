@@ -40,6 +40,12 @@ function Game:Finish(result, reason)
     if pausePending and not pausePending.state then
         pausePending:err("pause", "The pause offer is no longer available.")
     end
+    local resumePending = self.resumeAnswer
+    self.resumeAnswer = nil
+    self.resumePly = nil
+    if resumePending and not resumePending.state then
+        resumePending:err("resume", "The resume offer is no longer available.")
+    end
     local movePending = self.moveAnswer
     self.moveAnswer = nil
     if movePending and not movePending.state then
@@ -62,6 +68,10 @@ end
 
 function Game:OnPauseOffer(fn)
     self.onPauseOffer = fn
+end
+
+function Game:OnResumeOffer(fn)
+    self.onResumeOffer = fn
 end
 
 function Game:OnPause(fn)
@@ -172,6 +182,12 @@ local OFFER = {
         verb = "offers a pause",
         handler = "onPauseOffer",
     },
+    resume = {
+        declined = TEXT["resume-declined"],
+        gone = "The resume offer is no longer available.",
+        verb = "offers to resume",
+        handler = "onResumeOffer",
+    },
 }
 
 local function setPaused(game, paused)
@@ -217,8 +233,20 @@ function Game:Resume(onAck)
         return hook(ns.rejected("unsupported", ns.unsupportedMessage("opponent", { ns.defaultLabel("pause") })), onAck)
     end
     if not self.paused then return hook(ns.rejected("pause", "The game is not paused."), onAck) end
-    setPaused(self, false)
-    return hook(self.chess:Send(self.player, { t = "pause", id = self.id, answer = "resume" }), onAck)
+    local spec = OFFER.resume
+    local pending = self.resumeAnswer
+    if pending and not pending.state then pending:err("resume", spec.gone) end
+    self.resumePly = self.ply
+    local answer = ns.promise()
+    self.resumeAnswer = answer
+    local sent = self.chess:Send(self.player, { t = "pause", id = self.id, ply = self.ply, answer = "resume" })
+    sent:resolve(nil, function(code, message, detail)
+        if self.resumeAnswer ~= answer or answer.state then return end
+        self.resumeAnswer = nil
+        self.resumePly = nil
+        answer:err(code, message, detail)
+    end)
+    return hook(answer, onAck)
 end
 
 function Game:ToString()
@@ -611,14 +639,18 @@ end
 local function onOffer(game, player, payload, kind)
     local spec = OFFER[kind]
     local ply = payload.ply
-    if payload.answer == "offer" then
+    local resuming = kind == "pause" and payload.answer == "resume"
+    if resuming then spec = OFFER.resume end
+    if payload.answer == "offer" or resuming then
         local offer = {}
         function offer:Accept()
             if game.over or game.ply ~= ply then
-                return ns.rejected(kind, spec.gone)
+                return ns.rejected(resuming and "resume" or kind, spec.gone)
             end
             local promise = game.chess:Send(player, { t = kind, id = game.id, ply = ply, answer = "accept" })
-            if kind == "draw" then
+            if resuming then
+                setPaused(game, false)
+            elseif kind == "draw" then
                 game:Finish("1/2-1/2", "draw")
             else
                 setPaused(game, true)
@@ -627,7 +659,7 @@ local function onOffer(game, player, payload, kind)
         end
         function offer:Decline()
             if game.over or game.ply ~= ply then
-                return ns.rejected(kind, spec.gone)
+                return ns.rejected(resuming and "resume" or kind, spec.gone)
             end
             return game.chess:Send(player, { t = kind, id = game.id, ply = ply, answer = "decline" })
         end
@@ -637,7 +669,13 @@ local function onOffer(game, player, payload, kind)
         local handler = game[spec.handler]
         if handler then handler(offer) else offer:Decline() end
     elseif payload.answer == "accept" then
-        if ply == game.ply or ply == game[kind .. "Ply"] then
+        if kind == "pause" and game.resumeAnswer and not game.resumeAnswer.state and (ply == game.ply or ply == game.resumePly) then
+            setPaused(game, false)
+            local pending = game.resumeAnswer
+            game.resumeAnswer = nil
+            game.resumePly = nil
+            if pending and not pending.state then pending:ok() end
+        elseif ply == game.ply or ply == game[kind .. "Ply"] then
             if kind == "draw" then
                 game:Finish("1/2-1/2", "draw")
             else
@@ -649,14 +687,16 @@ local function onOffer(game, player, payload, kind)
             end
         end
     elseif payload.answer == "decline" then
-        local pending = game[kind .. "Answer"]
-        if pending and not pending.state and (ply == game[kind .. "Ply"] or ply == nil) then
-            game[kind .. "Answer"] = nil
-            game[kind .. "Ply"] = nil
+        local key, plyKey = kind .. "Answer", kind .. "Ply"
+        if kind == "pause" and game.resumeAnswer and not game.resumeAnswer.state then
+            key, plyKey, spec = "resumeAnswer", "resumePly", OFFER.resume
+        end
+        local pending = game[key]
+        if pending and not pending.state and (ply == game[plyKey] or ply == nil) then
+            game[key] = nil
+            game[plyKey] = nil
             pending:err("declined", spec.declined)
         end
-    elseif kind == "pause" and payload.answer == "resume" then
-        setPaused(game, false)
     end
 end
 

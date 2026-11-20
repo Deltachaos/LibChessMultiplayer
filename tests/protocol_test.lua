@@ -792,8 +792,26 @@ Test.test("pause is optional and an accepted pause blocks moves until resume", f
     local moveCode
     white:Move("e2e4", function(ok, got) moveCode = got end)
     assertEq(moveCode, "paused")
-    white:Resume()
+    local resumeAnswer = "decline"
+    black:OnResumeOffer(function(offer)
+        assertEq(offer:ToString(), "Cara · DeltaChess · offers to resume")
+        if resumeAnswer == "decline" then offer:Decline() else offer:Accept() end
+    end)
+    local resumed
+    white:Resume(function(ok, gotCode, gotMessage)
+        resumed = { ok = ok, code = gotCode, message = gotMessage }
+    end)
+    assertEq(white.paused, true)
     advance({ cara, dave }, 1)
+    assertEq(resumed.ok, false)
+    assertEq(resumed.code, "declined")
+    assertEq(resumed.message, "Opponent declined the resume.")
+    assertEq(white.paused, true)
+    assertEq(black.paused, true)
+    resumeAnswer = "accept"
+    white:Resume(function(ok) resumed = { ok = ok } end)
+    advance({ cara, dave }, 1)
+    assertEq(resumed.ok, true)
     assertEq(white.paused, false)
     assertEq(black.paused, false)
     assertEq(flags.white, false)
