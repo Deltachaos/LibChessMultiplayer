@@ -43,6 +43,48 @@ end
 
 local MP_TOC = multiplayerToc()
 
+local function directoryOf(path)
+    return path:match("^(.*)[/\\][^/\\]+$") or "."
+end
+
+local function joinPath(directory, file)
+    if directory == "." or directory == "" then return file end
+    return directory .. "/" .. file
+end
+
+-- The packaged library lives in Libs/LibMultiplayer, while its TOC still lists
+-- Libs/LibStub and the other libraries. Those are fetched next to this addon.
+local function resolveAddonFile(directory, line)
+    local stripped = line:gsub("^Libs/", "")
+    local candidates = {
+        joinPath(directory, line),
+        joinPath(directory, stripped),
+        line,
+        stripped,
+    }
+    for i = 1, #candidates do
+        if exists(candidates[i]) then return candidates[i] end
+    end
+    error("cannot open " .. candidates[1])
+end
+
+local function loadAddon(path, env)
+    local toc, err = Test.read(path)
+    if not toc then error(err or ("cannot read " .. path)) end
+    local directory = directoryOf(path)
+    for rawLine in toc:gmatch("[^\r\n]+") do
+        local line = rawLine:gsub("^%s+", ""):gsub("%s+$", "")
+        if line ~= "" and not line:match("^#") then
+            local child = resolveAddonFile(directory, line)
+            if child:match("%.xml$") then
+                Test.loadXml(child, env)
+            else
+                Test.load(child, env)
+            end
+        end
+    end
+end
+
 local function kindOf(text)
     return type(text) == "string" and text:match("^([^\001]+)") or ""
 end
@@ -221,7 +263,7 @@ local function newClient(spec)
         GetFriendInfoByIndex = function() return nil end,
     }
 
-    Test.loadToc(MP_TOC, env)
+    loadAddon(MP_TOC, env)
     Test.loadToc("LibChessMultiplayer.toc", env)
     client.mp = env.LibStub("LibMultiplayer-1.0")
     client.lib = env.LibStub("LibChessMultiplayer-1.0")

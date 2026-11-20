@@ -5,6 +5,15 @@ externals:
     url: https://github.com/WoWUIDev/Ace3
     branch: master
     path: LibStub
+  Libs/LibDeflate:
+    url: https://github.com/SafeteeWoW/LibDeflate
+    branch: main
+  Libs/LibSerialize:
+    url: https://github.com/rossnichols/LibSerialize
+    branch: main
+  Libs/LibCrypto:
+    url: https://github.com/Deltachaos/LibCrypto
+    branch: main
   Libs/LibMultiplayer:
     url: https://github.com/Deltachaos/LibMultiplayer
     branch: main
@@ -16,3 +25,6 @@ ignore:
   - tests
   - Libs/LibUnitWow
   - Libs/LibMultiplayer
+  - Libs/LibDeflate
+  - Libs/LibSerialize
+  - Libs/LibCrypto
